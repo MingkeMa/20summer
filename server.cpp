@@ -24,31 +24,12 @@
 
 #define BUF_LEN 1000
 
-MYSQL *con;
-net_async_status status;
-
-// catch ctrl+c
-void my_handler(sig_atomic_t s)
-{
-  printf("server closed\n");
-  mysql_close(con);
-  exit(0);
-}
-
-// handle mysql error
-void handle_mysql_error(MYSQL *con)
-{
-  fprintf(stderr, "%s\n", mysql_error(con));
-  mysql_close(con);
-  exit(1);
-}
 
 /**************************************************/
-/* a few simple linked list functions             */
+/* simple linked list and helper functions        */
 /**************************************************/
 
-/* A linked list node data structure to maintain application
-   information related to a connected socket */
+/* linked list node to maintain information related to a connected socket */
 struct node
 {
   int socket;
@@ -59,11 +40,22 @@ struct node
   int offset;
   int msg_len;
   struct node *next;
+
   const char *query_text;
+  // each client must have its own mysql connection to use async sql query
+  MYSQL *con;
+  net_async_status status;
 };
 
-/* remove the data structure associated with a connected socket
-   used when tearing down the connection */
+// handle mysql error
+void handle_mysql_error(MYSQL *con)
+{
+  fprintf(stderr, "%s\n", mysql_error(con));
+  mysql_close(con);
+  exit(1);
+}
+
+/* tear down the connection of a specific socket */
 void dump(struct node *head, int socket)
 {
   struct node *current, *temp;
@@ -74,10 +66,11 @@ void dump(struct node *head, int socket)
   {
     if (current->next->socket == socket)
     {
-      /* remove */
       temp = current->next;
       current->next = temp->next;
-      free(temp); /* don't forget to free memory */
+      free(temp->buffer); 
+      mysql_close(temp->con);
+      free(temp); 
       return;
     }
     else
@@ -87,7 +80,7 @@ void dump(struct node *head, int socket)
   }
 }
 
-/* create the data structure associated with a connected socket */
+/* create a node associated with a connected socket */
 void add(struct node *head, int socket, struct sockaddr_in addr)
 {
   struct node *new_node;
@@ -101,25 +94,27 @@ void add(struct node *head, int socket, struct sockaddr_in addr)
   new_node->msg_len = 0;
   new_node->next = head->next;
   new_node->query_text = NULL;
+  new_node->con = mysql_init(NULL);
+  if (new_node->con == NULL)
+  {
+    fprintf(stderr, "%s\n", mysql_error(new_node->con));
+    exit(1);
+  }
+  if (mysql_real_connect(new_node->con, "localhost", "root", "myPW",
+                         "testdb", 0, NULL, 0) == NULL)
+    handle_mysql_error(new_node->con);
   head->next = new_node;
 }
 
-/*****************************************/
-/* main program                          */
-/*****************************************/
-
-/* simple server, takes one parameter, the server port number */
-int main(int argc, char **argv)
-{
-  signal(SIGINT, my_handler);
-
-  con = mysql_init(NULL);
+/* build test database */
+void build_testdb(){
+  // connect to mysql
+  MYSQL *con = mysql_init(NULL);
   if (con == NULL)
   {
     fprintf(stderr, "%s\n", mysql_error(con));
     exit(1);
   }
-
   if (mysql_real_connect(con, "localhost", "root", "myPW",
                          "testdb", 0, NULL, 0) == NULL)
     handle_mysql_error(con);
@@ -144,64 +139,101 @@ int main(int argc, char **argv)
       handle_mysql_error(con);
   }
 
-  /* socket and option variables */
+  // close connection
+  mysql_close(con);
+}
+
+/**************************************************/
+/* global variables and exit function             */
+/**************************************************/
+
+// linked list for keeping track of connected sockets
+struct node head;
+
+/* catch ctrl+c and exit */
+void my_handler(sig_atomic_t s)
+{
+  struct node *temp, *current;
+  current = head.next;
+  while (current){
+    temp=current;
+    current=current->next;
+    close(temp->socket);
+    free(temp->buffer);
+    mysql_close(temp->con);
+    free(temp);
+  }
+  
+  printf("server closed\n");
+  exit(0);
+}
+
+/*****************************************/
+/* main program                          */
+/*****************************************/
+
+/* takes one parameter, the server port number */
+int main(int argc, char **argv)
+{
+  signal(SIGINT, my_handler);
+
+  build_testdb();
+
+  // initialize dummy head node of linked list
+  head.socket = -1;
+  head.next = 0;
+  struct node *current;
+
+  // socket and option variables
   int sock, new_sock;
   int optval = 1;
 
-  /* server socket address variables */
+  // server socket address variables
   struct sockaddr_in sin;
   unsigned short server_port = atoi(argv[1]);
-  /* fill in the address of the server socket */
+  // fill in the address of the server socket
   memset(&sin, 0, sizeof(sin));
   sin.sin_family = AF_INET;
   sin.sin_addr.s_addr = INADDR_ANY;
   sin.sin_port = htons(server_port);
 
-  /* socket address variables for incoming connected client */
+  // socket address variables for incoming connected client
   struct sockaddr_in addr;
   socklen_t addr_len = sizeof(struct sockaddr_in);
 
-  /* maximum number of pending connection requests */
+  // maximum number of pending connection requests
   int BACKLOG = 5;
 
-  /* variables for select */
+  // variables for select
   fd_set read_set, write_set;
   struct timeval time_out;
   int select_retval, max;
 
-  /* number of bytes sent/received */
+  // number of bytes sent/received
   int count;
 
-  /* linked list for keeping track of connected sockets */
-  struct node head;
-  struct node *current;
-
-  /* initialize dummy head node of linked list */
-  head.socket = -1;
-  head.next = 0;
-
-  /* create a server socket to listen for TCP connection requests */
+  // create a server socket to listen for TCP connection requests
   if ((sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) //why PF???
   {
     perror("opening TCP socket");
     abort();
   }
 
-  /* set option so we can reuse the port number quickly after a restart */
+  // set option so we can reuse the port number after a restart
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0)
   {
     perror("setting TCP socket option");
     abort();
   }
 
-  /* bind server socket to the address */
+  // bind server socket to the address
   if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0)
   {
     perror("binding socket to address");
     abort();
   }
 
-  /* put the server socket in listen mode */
+  // put the server socket in listen mode
   if (listen(sock, BACKLOG) < 0)
   {
     perror("listen on socket failed");
@@ -210,14 +242,14 @@ int main(int argc, char **argv)
 
   while (1)
   {
-    /* set up the file descriptor bit map that select should be watching */
-    FD_ZERO(&read_set);  /* clear everything */
-    FD_ZERO(&write_set); /* clear everything */
+    // set up the file descriptor bit map
+    FD_ZERO(&read_set); 
+    FD_ZERO(&write_set);
+    FD_SET(sock, &read_set); // put the listening socket in
 
-    FD_SET(sock, &read_set); /* put the listening socket in */
-    max = sock;              /* initialize max */
+    max = sock;              // initialize max
 
-    /* put connected sockets into the read and write sets to monitor them */
+    // put connected sockets into the read and write sets to monitor them
     for (current = head.next; current; current = current->next)
     {
       FD_SET(current->socket, &read_set);
@@ -225,19 +257,19 @@ int main(int argc, char **argv)
       // check query status
       if (current->pending_data==1)
       {
-        if (status == NET_ASYNC_NOT_READY)
+        if (current->status == NET_ASYNC_NOT_READY)
         {
-          status = mysql_real_query_nonblocking(con, current->query_text, (unsigned long)strlen(current->query_text));
+          current->status = mysql_real_query_nonblocking(current->con, current->query_text, (unsigned long)strlen(current->query_text));
         }
-        if (status == NET_ASYNC_ERROR)
+        if (current->status == NET_ASYNC_ERROR)
         {
-          handle_mysql_error(con);
+          handle_mysql_error(current->con);
         }
-        if (status == NET_ASYNC_COMPLETE)
+        if (current->status == NET_ASYNC_COMPLETE)
         {
-          MYSQL_RES *result = mysql_store_result(con);
+          MYSQL_RES *result = mysql_store_result(current->con);
           if (result == NULL)
-            handle_mysql_error(con);
+            handle_mysql_error(current->con);
           int num_fields = mysql_num_fields(result);
           MYSQL_ROW row;
           while ((row = mysql_fetch_row(result)))
@@ -264,7 +296,7 @@ int main(int argc, char **argv)
       }
     }
 
-    time_out.tv_usec = 100000; /* 1-tenth of a second timeout */
+    time_out.tv_usec = 100000; // 0.1 s timeout
     time_out.tv_sec = 0;
 
     // invoke select
@@ -282,9 +314,9 @@ int main(int argc, char **argv)
       continue;
     }
 
-    if (select_retval > 0) /* at least one file descriptor is ready */
+    if (select_retval > 0)
     {
-      /* check the server socket */
+      // check the server socket
       if (FD_ISSET(sock, &read_set)) 
       {
         new_sock = accept(sock, (struct sockaddr *)&addr, &addr_len);
@@ -294,7 +326,7 @@ int main(int argc, char **argv)
           abort();
         }
 
-        /* make the socket non-blocking */
+        // make it non-blocking
         if (fcntl(new_sock, F_SETFL, O_NONBLOCK) < 0)
         {
           perror("making socket non-blocking");
@@ -303,16 +335,16 @@ int main(int argc, char **argv)
 
         printf("Accepted connection. Client IP address is: %s\n", inet_ntoa(addr.sin_addr));
 
-        /* remember this client connection in linked list */
+        // add into linked list
         add(&head, new_sock, addr);
       }
 
-      /* check other connected sockets */
+      // check other connected sockets 
       for (current = head.next; current; current = current->next)
       {
         //      printf("begin loop\n");
 
-        /* check previously unsuccessful writes */
+        // check previously unsuccessful writes
         if (FD_ISSET(current->socket, &write_set))
         {
           // printf("try to send\n");
@@ -335,23 +367,19 @@ int main(int argc, char **argv)
           {
             if (errno == EAGAIN)
             {
-              /* we are trying to dump too much data down the socket,
-		     it cannot take more for the time being
-		     will have to go back to select and wait til select
-		     tells us the socket is ready for writing
-		  */
+              // too much data waiting for the socket
             }
             else
             {
-              /* something else is wrong */
+              // something else is wrong
             }
           }
         }
 
         if (FD_ISSET(current->socket, &read_set))
         {
-          /* we have data from a client */
-          //	      printf("try to receive\n");
+          // we have data from a client
+          // printf("try to receive\n");
           count = recv(current->socket, current->buffer + current->offset, BUF_LEN - current->offset, MSG_DONTWAIT);
           if (count <= 0)
           {
@@ -364,21 +392,20 @@ int main(int argc, char **argv)
               perror("error receiving from a client");
             }
 
-            /* clean up */
+            // clean up
             close(current->socket);
             dump(&head, current->socket);
           }
           else
           {
-            /* we got count bytes of data from the client */
-            //initialize massage length
+            // initialize massage length
             if (current->msg_len == 0)
             {
               current->msg_len = 10;
               printf("Received size is %d.\n", count);
             }
             current->offset += count;
-            //if finish receiving, prepare for sending
+            // if finish receiving, prepare for sending
             if (current->offset == current->msg_len)
             {
               uint32_t uid = ntohl(*(uint32_t *)(current->buffer + 2));
@@ -391,7 +418,7 @@ int main(int argc, char **argv)
               std::string query = "SELECT * FROM PlayerLogin WHERE (UID = " + std::to_string(uid) + ") AND (dtEventTime BETWEEN " + date +
                                   " AND LAST_DAY(" + date + "))";
               current->query_text = query.c_str();
-              status = mysql_real_query_nonblocking(con, current->query_text,
+              current->status = mysql_real_query_nonblocking(current->con, current->query_text,
                                                     (unsigned long)strlen(current->query_text));
 
               // if (mysql_query(con, query.c_str()))

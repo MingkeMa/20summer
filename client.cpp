@@ -122,7 +122,7 @@ int main(int argc, char **argv)
   }
   avg_latency = total_latency / my_count;
   printf("average latency is: %Lf millisecond.\n", avg_latency / pow(10., 3));
-  //	getchar();
+  // getchar();
   free(recvbuffer);
   free(sendbuffer);
   return 0;

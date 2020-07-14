@@ -160,14 +160,14 @@ int main(int argc, char* argv[])
 {
     cout<<"hello world"<<endl;
     lua_State *L = luaL_newstate();
-luaL_openlibs(L);
-luaL_dofile(L, “tree.lua”);
+    luaL_openlibs(L);
+    luaL_dofile(L, “tree.lua”);
 
-lua_openShape(L);
-print_stack(L);
+    lua_openShape(L);
+    print_stack(L);
 
-luaL_dofile(L, "r_oo2.lua");
-print_stack(L);
-lua_settop(L, 0); 
-cout << endl;
+    luaL_dofile(L, "r_oo2.lua");
+    print_stack(L);
+    lua_settop(L, 0); 
+    cout << endl;
 }
