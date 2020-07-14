@@ -24,7 +24,6 @@
 
 #define BUF_LEN 1000
 
-
 /**************************************************/
 /* simple linked list and helper functions        */
 /**************************************************/
@@ -34,17 +33,18 @@ struct node
 {
   int socket;
   struct sockaddr_in client_addr;
-  int pending_data; // 0->not ready; 1->query being processed; 2->ready to send back
+  int pending_data; // 0->not ready; n>=1-> nth query being processed; -1->ready to send back
 
   char *buffer;
   int offset;
   int msg_len;
   struct node *next;
 
-  const char *query_text;
   // each client must have its own mysql connection to use async sql query
   MYSQL *con;
   net_async_status status;
+  char **query_array;
+  int query_num;
 };
 
 // handle mysql error
@@ -68,9 +68,9 @@ void dump(struct node *head, int socket)
     {
       temp = current->next;
       current->next = temp->next;
-      free(temp->buffer); 
+      free(temp->buffer);
       mysql_close(temp->con);
-      free(temp); 
+      free(temp);
       return;
     }
     else
@@ -93,7 +93,6 @@ void add(struct node *head, int socket, struct sockaddr_in addr)
   new_node->offset = 0;
   new_node->msg_len = 0;
   new_node->next = head->next;
-  new_node->query_text = NULL;
   new_node->con = mysql_init(NULL);
   if (new_node->con == NULL)
   {
@@ -107,7 +106,8 @@ void add(struct node *head, int socket, struct sockaddr_in addr)
 }
 
 /* build test database */
-void build_testdb(){
+void build_testdb()
+{
   // connect to mysql
   MYSQL *con = mysql_init(NULL);
   if (con == NULL)
@@ -155,15 +155,16 @@ void my_handler(sig_atomic_t s)
 {
   struct node *temp, *current;
   current = head.next;
-  while (current){
-    temp=current;
-    current=current->next;
+  while (current)
+  {
+    temp = current;
+    current = current->next;
     close(temp->socket);
     free(temp->buffer);
     mysql_close(temp->con);
     free(temp);
   }
-  
+
   printf("server closed\n");
   exit(0);
 }
@@ -243,28 +244,34 @@ int main(int argc, char **argv)
   while (1)
   {
     // set up the file descriptor bit map
-    FD_ZERO(&read_set); 
+    FD_ZERO(&read_set);
     FD_ZERO(&write_set);
     FD_SET(sock, &read_set); // put the listening socket in
 
-    max = sock;              // initialize max
+    max = sock; // initialize max
 
     // put connected sockets into the read and write sets to monitor them
     for (current = head.next; current; current = current->next)
     {
       FD_SET(current->socket, &read_set);
 
+      // printf("query is %s\n", current->query_array[current->pending_data-1]);
+
       // check query status
-      if (current->pending_data==1)
+      if (current->pending_data > 0)
       {
+        // query not finished
         if (current->status == NET_ASYNC_NOT_READY)
         {
-          current->status = mysql_real_query_nonblocking(current->con, current->query_text, (unsigned long)strlen(current->query_text));
+          current->status = mysql_real_query_nonblocking(current->con, current->query_array[current->pending_data - 1],
+                                                         (unsigned long)strlen(current->query_array[current->pending_data - 1]));
         }
+        // error happens
         if (current->status == NET_ASYNC_ERROR)
         {
           handle_mysql_error(current->con);
         }
+        // query completed
         if (current->status == NET_ASYNC_COMPLETE)
         {
           MYSQL_RES *result = mysql_store_result(current->con);
@@ -281,11 +288,28 @@ int main(int argc, char **argv)
             printf("\n");
           }
           mysql_free_result(result);
-          current->pending_data=2;
-        }
 
+          current->pending_data += 1;
+          if (current->pending_data > current->query_num)
+          { // all queries finished
+            current->pending_data = -1;
+            // free query array
+            for (int i = 0; i < current->query_num; i++)
+            {
+              delete[] current->query_array[i];
+            }
+            delete[] current->query_array;
+          }
+          else
+          { // do the next query
+            current->status = mysql_real_query_nonblocking(current->con, current->query_array[current->pending_data - 1],
+                                                           (unsigned long)strlen(current->query_array[current->pending_data - 1]));
+          }
+        }
       }
-      if (current->pending_data==2){
+
+      if (current->pending_data == -1)
+      {
         FD_SET(current->socket, &write_set);
       }
 
@@ -317,7 +341,7 @@ int main(int argc, char **argv)
     if (select_retval > 0)
     {
       // check the server socket
-      if (FD_ISSET(sock, &read_set)) 
+      if (FD_ISSET(sock, &read_set))
       {
         new_sock = accept(sock, (struct sockaddr *)&addr, &addr_len);
         if (new_sock < 0)
@@ -339,7 +363,7 @@ int main(int argc, char **argv)
         add(&head, new_sock, addr);
       }
 
-      // check other connected sockets 
+      // check other connected sockets
       for (current = head.next; current; current = current->next)
       {
         //      printf("begin loop\n");
@@ -401,43 +425,43 @@ int main(int argc, char **argv)
             // initialize massage length
             if (current->msg_len == 0)
             {
-              current->msg_len = 10;
+              current->msg_len = 12;
               printf("Received size is %d.\n", count);
             }
             current->offset += count;
             // if finish receiving, prepare for sending
             if (current->offset == current->msg_len)
             {
-              uint32_t uid = ntohl(*(uint32_t *)(current->buffer + 2));
-              uint32_t month = ntohl(*(uint32_t *)(current->buffer + 6));
-              printf("uid is %u, month is %u\n", uid, month);
-              // construct query
+              uint32_t upper_uid = ntohl(*(uint32_t *)(current->buffer + 2));
+              uint32_t lower_uid = ntohl(*(uint32_t *)(current->buffer + 6));
+              uint16_t month = ntohs(*(uint16_t *)(current->buffer + 10));
+              uint64_t uid = (static_cast<uint64_t>(upper_uid) << 32) | lower_uid;
+              printf("uid is %lu, month is %hu\n", uid, month);
+
+              // array for queries
+              current->query_num = 2;
+              current->query_array = new char *[2];
+              // construct the 1st query
               std::string padding = month < 10 ? "0" : "";
               std::string date = "'2020-" + padding + std::to_string(month) + "-01'";
-              // use BETWEEN to allow mysql to use index
-              std::string query = "SELECT * FROM PlayerLogin WHERE (UID = " + std::to_string(uid) + ") AND (dtEventTime BETWEEN " + date +
-                                  " AND LAST_DAY(" + date + "))";
-              current->query_text = query.c_str();
-              current->status = mysql_real_query_nonblocking(current->con, current->query_text,
-                                                    (unsigned long)strlen(current->query_text));
+              std::string query = "SELECT dtEventTime FROM PlayerLogin WHERE (UID = " + std::to_string(uid) + ") AND (dtEventTime BETWEEN " + date +
+                                  " AND LAST_DAY(" + date + "))"; // use BETWEEN to allow mysql to use index
+              // we have to make a copy if we want to use the string afterwards
+              int len = strlen(query.c_str());
+              current->query_array[0] = new char[len + 1];
+              strncpy(current->query_array[0], query.c_str(), len);
+              current->query_array[0][len] = '\0';
+              // do it again for the 2nd query
+              query = "SELECT dtEventTime FROM PlayerLogout WHERE (UID = " + std::to_string(uid) + ") AND (dtEventTime BETWEEN " + date +
+                      " AND LAST_DAY(" + date + "))";
+              len = strlen(query.c_str());
+              current->query_array[1] = new char[len + 1];
+              strncpy(current->query_array[1], query.c_str(), len);
+              current->query_array[1][len] = '\0';
 
-              // if (mysql_query(con, query.c_str()))
-              //   handle_mysql_error(con);
-
-              // MYSQL_RES *result = mysql_store_result(con);
-              // if (result == NULL)
-              //   handle_mysql_error(con);
-              // int num_fields = mysql_num_fields(result);
-              // MYSQL_ROW row;
-              // while ((row = mysql_fetch_row(result)))
-              // {
-              //   for (int i = 0; i < num_fields; i++)
-              //   {
-              //     printf("%s ", row[i] ? row[i] : "NULL");
-              //   }
-              //   printf("\n");
-              // }
-              // mysql_free_result(result);
+              // run the first query
+              current->status = mysql_real_query_nonblocking(current->con, current->query_array[0],
+                                                             (unsigned long)strlen(current->query_array[0]));
 
               current->pending_data = 1;
               current->offset = 0;

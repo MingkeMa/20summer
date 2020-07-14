@@ -79,18 +79,20 @@ int main(int argc, char **argv)
   for (i = 0; i < my_count; i++)
   {
     // set message
-    uint32_t uid = 1;
-    uint32_t month = 1;
+    uint64_t uid = 1;
+    uint16_t month = 1;
     *(uint16_t *)(sendbuffer) = (uint16_t)htons(1); // query type
-    *(uint32_t *)(sendbuffer + 2) = (uint32_t)htonl(uid); // uid
-    *(uint32_t *)(sendbuffer + 6) = (uint32_t)htonl(month); //month
+    *(uint32_t *)(sendbuffer + 2) = (uint32_t)htonl(uid >> 32); // upper_uid
+    *(uint32_t *)(sendbuffer + 6) = (uint32_t)htonl((uint32_t)uid); // lower_uid
+    *(uint16_t *)(sendbuffer + 10) = (uint16_t)htons(month); //month
 
     // send
     gettimeofday(&send_tv, NULL);
     offset = 0;
-    while (offset < 10)
+    int send_msg_len=12;
+    while (offset < send_msg_len)
     {
-      temp = send(sock, sendbuffer + offset, 10 - offset, 0);
+      temp = send(sock, sendbuffer + offset, send_msg_len - offset, 0);
       // printf("%d\n",offset);
       if (temp < 0)
       {
@@ -102,9 +104,10 @@ int main(int argc, char **argv)
 
     // recvive
     offset = 0;
-    while (offset < 8)
+    int recv_msg_len=8;
+    while (offset < recv_msg_len)
     {
-      temp = recv(sock, recvbuffer + offset, 8 - offset, 0);
+      temp = recv(sock, recvbuffer + offset, recv_msg_len - offset, 0);
       if (temp < 0)
       {
         perror("Error in receiving!\n");
