@@ -71,25 +71,26 @@ int main(int argc, char **argv)
     abort();
   }
 
-  // send and receive multiple times for measurement 
-  int offset,temp,i;
+  // send and receive multiple times for measurement
+  int offset, temp, i;
   struct timeval send_tv, recv_tv;
   long double cur_latency, avg_latency, total_latency = 0;
-  int my_count=1;
+  int my_count = 10;
   for (i = 0; i < my_count; i++)
   {
     // set message
     uint64_t uid = 1;
     uint16_t month = 1;
-    *(uint16_t *)(sendbuffer) = (uint16_t)htons(1); // query type
-    *(uint32_t *)(sendbuffer + 2) = (uint32_t)htonl(uid >> 32); // upper_uid
-    *(uint32_t *)(sendbuffer + 6) = (uint32_t)htonl((uint32_t)uid); // lower_uid
-    *(uint16_t *)(sendbuffer + 10) = (uint16_t)htons(month); //month
+    int send_msg_len = 14;
+    *(uint16_t *)(sendbuffer) = (uint16_t)htons((uint16_t)send_msg_len); // request len
+    *(uint16_t *)(sendbuffer + 2) = (uint16_t)htons((uint16_t)1);        // request type
+    *(uint32_t *)(sendbuffer + 4) = (uint32_t)htonl(uid >> 32);          // upper_uid
+    *(uint32_t *)(sendbuffer + 8) = (uint32_t)htonl((uint32_t)uid);      // lower_uid
+    *(uint16_t *)(sendbuffer + 12) = (uint16_t)htons(month);             // month
 
     // send
     gettimeofday(&send_tv, NULL);
     offset = 0;
-    int send_msg_len=12;
     while (offset < send_msg_len)
     {
       temp = send(sock, sendbuffer + offset, send_msg_len - offset, 0);
@@ -104,7 +105,7 @@ int main(int argc, char **argv)
 
     // recvive
     offset = 0;
-    int recv_msg_len=8;
+    int recv_msg_len = 8;
     while (offset < recv_msg_len)
     {
       temp = recv(sock, recvbuffer + offset, recv_msg_len - offset, 0);
@@ -117,9 +118,9 @@ int main(int argc, char **argv)
     }
     gettimeofday(&recv_tv, NULL);
 
-    uint32_t login_times = ntohl(*(uint32_t *)(recvbuffer));
+    uint16_t login_times = ntohs(*(uint16_t *)(recvbuffer + 2));
     uint32_t login_duration = ntohl(*(uint32_t *)(recvbuffer + 4));
-    printf("login %u times, loginduration is %u s\n", login_times, login_duration);
+    printf("login %hu times, loginduration is %u s\n", login_times, login_duration);
     cur_latency = (recv_tv.tv_sec - send_tv.tv_sec) * pow(10., 6) + recv_tv.tv_usec - send_tv.tv_usec;
     total_latency += cur_latency;
   }

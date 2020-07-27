@@ -2,22 +2,18 @@ CC	 	= g++
 LD	 	= g++
 CFLAGS	 	= -Wall -g
 
-LDFLAGS	 	=
-DEFS 	 	=
-
-all:	server client 
+all:	server client lib
 
 server: server.cpp
-	# $(CC) $(DEFS) $(CFLAGS) $(LIB) -o server server.cpp `mysql_config --cflags --libs`
-	$(CC) $(DEFS) $(CFLAGS) $(LIB) server.cpp  -I/usr/include/mysql \
+	$(CC) $(CFLAGS) $(LIB) server.cpp  -I/usr/include/mysql \
   -o server -L/usr/lib64/ -lstdc++ \
-  -L/usr/lib/mysql/ -lmysqlclient
+  -L/usr/lib/mysql/ -lmysqlclient -IC:/lua-5.3.4/install/include/ -LC:/lua-5.3.4/install/lib/ -llua -ldl -Wl,-E
 
 client: client.cpp
-	$(CC) $(DEFS) $(CFLAGS) $(LIB) -o client client.cpp
+	$(CC) $(CFLAGS) $(LIB) -o client client.cpp
 
-#name_addr:	name_addr.c
-#	$(CC) $(DEFS) $(CFLAGS) $(LIB) -o name_addr name_addr.c
+lib: mylib.cpp
+	$(CC) $(CFLAGS) mylib.cpp -shared -fpic -IC:/lua-5.3.4/install/include/ -o mylib.so
 
 clean:
 	rm -f *.o
@@ -25,4 +21,5 @@ clean:
 	rm -f core.*.*
 	rm -f server
 	rm -f client
+	rm -f *.so
 
