@@ -88,6 +88,10 @@ int main(int argc, char **argv)
     *(uint32_t *)(sendbuffer + 8) = (uint32_t)htonl((uint32_t)uid);      // lower_uid
     *(uint16_t *)(sendbuffer + 12) = (uint16_t)htons(month);             // month
 
+    // int send_msg_len = 4;
+    // *(uint16_t *)(sendbuffer) = (uint16_t)htons((uint16_t)send_msg_len); // request len
+    // *(uint16_t *)(sendbuffer + 2) = (uint16_t)htons((uint16_t)2);        // request type
+
     // send
     gettimeofday(&send_tv, NULL);
     offset = 0;

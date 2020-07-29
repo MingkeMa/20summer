@@ -18,5 +18,8 @@ do
         cnt=cnt+1
     end
 end
--- print(cnt)
--- print(dur)
+local buffer = lunar.Buffer();
+buffer.setBuffer(buffer_pointer)
+buffer.setS(cnt,2)
+buffer.setL(dur,4)
+msg_len=8

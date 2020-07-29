@@ -2,8 +2,8 @@ print("doing read_buffer")
 do
     local buffer = lunar.Buffer();
     buffer.setBuffer(buffer_pointer)
-    type=buffer.getS(2)
-    if(type==1)
+    request_type=buffer.getS(2)
+    if(request_type==1)
     then
         query_num=2
         local upper_uid=buffer.getL(4)
@@ -17,9 +17,11 @@ do
                 " AND LAST_DAY(" .. date .. "))"  --use BETWEEN to allow mysql to use index
         query2 = "SELECT dtEventTime FROM PlayerLogout WHERE (UID = " .. uid .. ") AND (dtEventTime BETWEEN " .. date ..
                 " AND LAST_DAY(" .. date .. "))" 
-    elseif(type==2)
+    elseif(request_type==2)
     then
-        
+        query_num=1
+        query1="SELECT TeamID, dtEventTime, TeamKill, TeamRank FROM (GameRecord INNER JOIN MatchRegister USING (OpenID1,OpenID2,OpenID3,OpenID4))"
+
     else
 
     end

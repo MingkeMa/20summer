@@ -131,7 +131,7 @@ void build_testdb()
                          "testdb", 0, NULL, 0) == NULL)
     handle_mysql_error(con);
 
-  // generate test tables
+  // generate PlayerLogin and PlayerLogout
   if (mysql_query(con, "DROP TABLE IF EXISTS PlayerLogin"))
     handle_mysql_error(con);
   if (mysql_query(con, "CREATE TABLE PlayerLogin(UID BIGINT, dtEventTime DATETIME)"))
@@ -149,6 +149,39 @@ void build_testdb()
     query = "INSERT INTO PlayerLogout VALUES(1,'2020-01-" + padding + std::to_string(i) + " 01:10:11')";
     if (mysql_query(con, query.c_str()))
       handle_mysql_error(con);
+  }
+
+  // generate MatchRegister
+  if (mysql_query(con, "DROP TABLE IF EXISTS MatchRegister"))
+    handle_mysql_error(con);
+  if (mysql_query(con, "CREATE TABLE MatchRegister(TeamID CHAR(32), OpenID1 CHAR(64), OpenID2 CHAR(64),OpenID3 CHAR(64),OpenID4 CHAR(64))"))
+    handle_mysql_error(con);
+  for (int i = 1; i < 200; i++)
+  {
+    int base=i*10;
+    std::string query = "INSERT INTO MatchRegister VALUES(" + std::to_string(i) + ","
+    + std::to_string(base+1) + ","+ std::to_string(base+2) + ","+ std::to_string(base+3) + ","+ std::to_string(base+4) +")";
+    if (mysql_query(con, query.c_str()))
+      handle_mysql_error(con);
+  }
+
+  // generate GameRecord
+  if (mysql_query(con, "DROP TABLE IF EXISTS GameRecord"))
+    handle_mysql_error(con);
+  if (mysql_query(con, "CREATE TABLE GameRecord(dtEventTime DATETIME, OpenID1 CHAR(64), OpenID2 CHAR(64),OpenID3 CHAR(64),OpenID4 CHAR(64), TeamKill INT, TeamRank INT)"))
+    handle_mysql_error(con);
+  for (int i = 1; i < 200; i++)
+  {
+      for (int j = 1; j < 50; j++)   // each team has 49 game records
+    {
+      int base=i*10;
+      std::string padding = (j%30+1) < 10 ? "0" : "";
+      std::string query = "INSERT INTO GameRecord VALUES('2020-0"+std::to_string(j/30+1)+"-" + padding + std::to_string(j%30+1) + " 00:00:01'," + 
+      std::to_string(base+1) + ","+ std::to_string(base+2) + ","+ std::to_string(base+3) + ","+ std::to_string(base+4) 
+      +","+ std::to_string(j) +","+ std::to_string(i%25+1) +")";
+      if (mysql_query(con, query.c_str()))
+        handle_mysql_error(con);
+    }
   }
 
   // close connection
@@ -190,8 +223,8 @@ int main(int argc, char **argv)
 {
   // register ctrl+c
   signal(SIGINT, my_handler);
-  //initial mysql
-  build_testdb();
+  // //initial mysql
+  // build_testdb();
   // initial lua
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
@@ -300,8 +333,6 @@ int main(int argc, char **argv)
           current->pending_data += 1;
           if (current->pending_data > current->query_num)
           { // all queries finished
-            current->pending_data = -1;
-            current->msg_len = 8;
             // extract results, free query array and results
             for (int i = 0; i < current->query_num; i++)
             {
@@ -332,6 +363,8 @@ int main(int argc, char **argv)
             delete[] current->results;
 
             // call lua scripts
+            lua_pushlightuserdata(L, current->buffer);
+            lua_setglobal(L, "buffer_pointer");
             lua_getglobal(L, "lua_scripts");
             lua_pushnumber(L, current->request_type);
             lua_gettable(L, -2);
@@ -343,15 +376,20 @@ int main(int argc, char **argv)
               printf("Error: %s\n", lua_tostring(L, -1));
             }
 
-            // set message
-            lua_getglobal(L, "cnt");
-            lua_getglobal(L, "dur");
-            if (!lua_isnumber(L, -2))
-              printf("Error! `cnt' should be a number\n");
-            if (!lua_isnumber(L, -1))
-              printf("Error! `dur' should be a number\n");
-            *(uint16_t *)(current->buffer + 2) = (uint16_t)htons((uint16_t)lua_tonumber(L, -2));
-            *(uint32_t *)(current->buffer + 4) = (uint32_t)htonl((uint32_t)lua_tonumber(L, -1));
+            // // set message
+            // lua_getglobal(L, "cnt");
+            // lua_getglobal(L, "dur");
+            // if (!lua_isnumber(L, -2))
+            //   printf("Error! `cnt' should be a number\n");
+            // if (!lua_isnumber(L, -1))
+            //   printf("Error! `dur' should be a number\n");
+            // *(uint16_t *)(current->buffer + 2) = (uint16_t)htons((uint16_t)lua_tonumber(L, -2));
+            // *(uint32_t *)(current->buffer + 4) = (uint32_t)htonl((uint32_t)lua_tonumber(L, -1));
+            current->pending_data = -1;
+            lua_getglobal(L, "msg_len");
+            if (!lua_isinteger(L, -1))
+              printf("Error! `msg_len' should be a number\n");
+            current->msg_len = lua_tointeger(L,-1);
             lua_settop(L, 0);
           }
           else
@@ -491,9 +529,9 @@ int main(int argc, char **argv)
                 printf("Error: %s\n", lua_tostring(L, -1));
               }
               // retrieve queries
-              lua_getglobal(L, "type");
+              lua_getglobal(L, "request_type");
               if (!lua_isnumber(L, -1))
-                printf("Error! `type' should be a number\n");
+                printf("Error! `request_type' should be a number\n");
               current->request_type = lua_tonumber(L, -1);
               lua_getglobal(L, "query_num");
               if (!lua_isnumber(L, -1))

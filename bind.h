@@ -37,6 +37,18 @@ class Buffer
             lua_pushinteger(L, (lua_Integer) res);
             return 1;
         }   
+        int setL(lua_State *L){
+            int pos = lua_tointeger(L, -1);
+            int number = lua_tointeger(L, -2);
+            *(uint32_t *)(buffer + pos) = (uint32_t)htonl((uint32_t)number);
+            return 0;
+        }   
+        int setS(lua_State *L){
+            int pos = lua_tointeger(L, -1);
+            int number = lua_tointeger(L, -2);
+            *(uint16_t *)(buffer + pos) = (uint16_t)htons((uint16_t)number);
+            return 0;
+        }           
         int print(lua_State *L) 
         {   
             printf("what in buffer is: %s\n",buffer);
@@ -52,5 +64,7 @@ EXPORT_LUNAR_FUNCTION_BEGIN(Buffer)
 EXPORT_LUNAR_FUNCTION(Buffer, setBuffer)
 EXPORT_LUNAR_FUNCTION(Buffer, getL)
 EXPORT_LUNAR_FUNCTION(Buffer, getS)
+EXPORT_LUNAR_FUNCTION(Buffer, setL)
+EXPORT_LUNAR_FUNCTION(Buffer, setS)
 EXPORT_LUNAR_FUNCTION(Buffer, print)
 EXPORT_LUNAR_FUNCTION_END(Buffer)
