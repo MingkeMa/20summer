@@ -10,7 +10,7 @@ do
         local lower_uid=buffer.getL(8)
         local month=buffer.getS(12)
         local uid= (upper_uid << 32) | lower_uid
-        print("uid is "..uid..", month is "..month)
+        -- print("uid is "..uid..", month is "..month)
         padding = (month < 10) and "0" or ""
         date= "'2020-" .. padding .. month .. "-01'";
         query1 = "SELECT dtEventTime FROM PlayerLogin WHERE (UID = " .. uid .. ") AND (dtEventTime BETWEEN " .. date ..

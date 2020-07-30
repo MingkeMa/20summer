@@ -75,10 +75,11 @@ int main(int argc, char **argv)
   int offset, temp, i;
   struct timeval send_tv, recv_tv;
   long double cur_latency, avg_latency, total_latency = 0;
-  int my_count = 10;
+  int my_count = 1;
   for (i = 0; i < my_count; i++)
   {
     // set message
+
     uint64_t uid = 1;
     uint16_t month = 1;
     int send_msg_len = 14;
@@ -98,7 +99,6 @@ int main(int argc, char **argv)
     while (offset < send_msg_len)
     {
       temp = send(sock, sendbuffer + offset, send_msg_len - offset, 0);
-      // printf("%d\n",offset);
       if (temp < 0)
       {
         perror("Error in sending!\n");
@@ -110,6 +110,7 @@ int main(int argc, char **argv)
     // recvive
     offset = 0;
     int recv_msg_len = 8;
+    // int recv_msg_len = 2 + 4 * 20;
     while (offset < recv_msg_len)
     {
       temp = recv(sock, recvbuffer + offset, recv_msg_len - offset, 0);
@@ -125,6 +126,14 @@ int main(int argc, char **argv)
     uint16_t login_times = ntohs(*(uint16_t *)(recvbuffer + 2));
     uint32_t login_duration = ntohl(*(uint32_t *)(recvbuffer + 4));
     printf("login %hu times, loginduration is %u s\n", login_times, login_duration);
+
+    // printf("top 20 teams are:\n");
+    // for (int i = 0; i < 20; i++)
+    // {
+    //   printf("%u ", ntohl(*(uint32_t *)(recvbuffer + 2 + 4 * i)));
+    // }
+    // printf("\n");
+    
     cur_latency = (recv_tv.tv_sec - send_tv.tv_sec) * pow(10., 6) + recv_tv.tv_usec - send_tv.tv_usec;
     total_latency += cur_latency;
   }

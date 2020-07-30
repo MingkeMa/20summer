@@ -1,6 +1,6 @@
 print("doing calc_login_dur")
-print(res0)
-print(res1)
+-- print(res0)
+-- print(res1)
 mylib=require("mylib")
 res0=mylib.split(res0,"|")
 res1=mylib.split(res1,"|")
