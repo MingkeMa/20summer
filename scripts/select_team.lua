@@ -35,6 +35,7 @@ do
     elseif (i<=15) then score=2
     elseif (i<=20) then score=1
     else score=0 end
+    rank2score[i]=score
     rank2score[tostring(i)]=score
 end
  --comparator, sort using score, desc
@@ -43,10 +44,13 @@ local function my_comparator2(a, b)
 end
 
 local teamScore={}
+
+mylib.pq_pthread(teams)
+-- print_tree(teams)
 for k,v in pairs(teams)
 do
     --get the most recent 30 games for each team
-    table.sort(v,my_comparator1)
+    -- table.sort(v,my_comparator1)
     local games={}
     for i = 1,30
     do

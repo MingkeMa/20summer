@@ -172,13 +172,14 @@ void build_testdb()
     handle_mysql_error(con);
   for (int i = 1; i < 200; i++)
   {
-      for (int j = 1; j < 50; j++)   // each team has 49 game records
+      for (int j = 1; j < 500; j++)   // each team has 499 game records
     {
       int base=i*10;
-      std::string padding = (j%30+1) < 10 ? "0" : "";
-      std::string query = "INSERT INTO GameRecord VALUES('2020-0"+std::to_string(j/30+1)+"-" + padding + std::to_string(j%30+1) + " 00:00:01'," + 
+      std::string padding1 = (j%12+1) < 10 ? "0" : "";
+      std::string padding2 = (j/29+1) < 10 ? "0" : "";
+      std::string query = "INSERT INTO GameRecord VALUES('2020-"+padding1+std::to_string(j%12+1)+"-" + padding2 + std::to_string(j/29+1) + " 00:00:01'," + 
       std::to_string(base+1) + ","+ std::to_string(base+2) + ","+ std::to_string(base+3) + ","+ std::to_string(base+4) 
-      +","+ std::to_string(j) +","+ std::to_string(i%25+1) +")";
+      +","+ std::to_string(j%30) +","+ std::to_string(i%25+1) +")";
       if (mysql_query(con, query.c_str()))
         handle_mysql_error(con);
     }
