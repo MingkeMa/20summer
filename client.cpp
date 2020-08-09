@@ -80,18 +80,18 @@ int main(int argc, char **argv)
   {
     // set message
 
-    // uint64_t uid = 1;
-    // uint16_t month = 1;
-    // int send_msg_len = 14;
-    // *(uint16_t *)(sendbuffer) = (uint16_t)htons((uint16_t)send_msg_len); // request len
-    // *(uint16_t *)(sendbuffer + 2) = (uint16_t)htons((uint16_t)1);        // request type
-    // *(uint32_t *)(sendbuffer + 4) = (uint32_t)htonl(uid >> 32);          // upper_uid
-    // *(uint32_t *)(sendbuffer + 8) = (uint32_t)htonl((uint32_t)uid);      // lower_uid
-    // *(uint16_t *)(sendbuffer + 12) = (uint16_t)htons(month);             // month
-
-    int send_msg_len = 4;
+    uint64_t uid = 1;
+    uint16_t month = 1;
+    int send_msg_len = 14;
     *(uint16_t *)(sendbuffer) = (uint16_t)htons((uint16_t)send_msg_len); // request len
-    *(uint16_t *)(sendbuffer + 2) = (uint16_t)htons((uint16_t)2);        // request type
+    *(uint16_t *)(sendbuffer + 2) = (uint16_t)htons((uint16_t)1);        // request type
+    *(uint32_t *)(sendbuffer + 4) = (uint32_t)htonl(uid >> 32);          // upper_uid
+    *(uint32_t *)(sendbuffer + 8) = (uint32_t)htonl((uint32_t)uid);      // lower_uid
+    *(uint16_t *)(sendbuffer + 12) = (uint16_t)htons(month);             // month
+
+    // int send_msg_len = 4;
+    // *(uint16_t *)(sendbuffer) = (uint16_t)htons((uint16_t)send_msg_len); // request len
+    // *(uint16_t *)(sendbuffer + 2) = (uint16_t)htons((uint16_t)2);        // request type
 
     // send
     gettimeofday(&send_tv, NULL);
@@ -109,8 +109,8 @@ int main(int argc, char **argv)
 
     // recvive
     offset = 0;
-    // int recv_msg_len = 8;
-    int recv_msg_len = 2 + 4 * 20;
+    int recv_msg_len = 8;
+    // int recv_msg_len = 2 + 4 * 20;
     while (offset < recv_msg_len)
     {
       temp = recv(sock, recvbuffer + offset, recv_msg_len - offset, 0);
@@ -123,16 +123,16 @@ int main(int argc, char **argv)
     }
     gettimeofday(&recv_tv, NULL);
 
-    // uint16_t login_times = ntohs(*(uint16_t *)(recvbuffer + 2));
-    // uint32_t login_duration = ntohl(*(uint32_t *)(recvbuffer + 4));
-    // printf("login %hu times, loginduration is %u s\n", login_times, login_duration);
+    uint16_t login_times = ntohs(*(uint16_t *)(recvbuffer + 2));
+    uint32_t login_duration = ntohl(*(uint32_t *)(recvbuffer + 4));
+    printf("login %hu times, loginduration is %u s\n", login_times, login_duration);
 
-    printf("top 20 teams are:\n");
-    for (int i = 0; i < 20; i++)
-    {
-      printf("%u ", ntohl(*(uint32_t *)(recvbuffer + 2 + 4 * i)));
-    }
-    printf("\n");
+    // printf("top 20 teams are:\n");
+    // for (int i = 0; i < 20; i++)
+    // {
+    //   printf("%u ", ntohl(*(uint32_t *)(recvbuffer + 2 + 4 * i)));
+    // }
+    // printf("\n");
     
     cur_latency = (recv_tv.tv_sec - send_tv.tv_sec) * pow(10., 6) + recv_tv.tv_usec - send_tv.tv_usec;
     total_latency += cur_latency;

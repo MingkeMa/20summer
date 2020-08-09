@@ -28,6 +28,7 @@ extern "C"
 //sudo mkdir -p /var/run/mysqld
 //sudo chown mysql:mysql /var/run/mysqld
 //sudo service mysql start
+//redis-6.0.6/src/redis-server
 //./server 1000
 //mysql -u root -p
 //myPW

@@ -1,6 +1,14 @@
 print("doing select_team")
-if(not client:exists("request2"))
+local buffer = lunar.Buffer()
+buffer.setBuffer(buffer_pointer)
+if(client:exists("request2"))
 then
+    local res=client:lrange('request2',0,-1)
+    for i = 1,20
+    do
+        buffer.setL(res[i],2+4*(i-1))
+    end
+else
     -- print(res0)
     mylib=require("mylib")
     res0=mylib.split(res0,"|")
@@ -70,21 +78,12 @@ then
         table.insert(teamScore,{score/20,k})
     end
     table.sort(teamScore,my_comparator1)
-    local buffer = lunar.Buffer()
-    buffer.setBuffer(buffer_pointer)
     client:del('request2')
     for i = 1,20
     do
         buffer.setL(teamScore[i][2],2+4*(i-1))
         client:rpush('request2', teamScore[i][2])
     end
-else
-    local res=client:lrange('request2',0,-1)
-    local buffer = lunar.Buffer()
-    buffer.setBuffer(buffer_pointer)
-    for i = 1,20
-    do
-        buffer.setL(res[i],2+4*(i-1))
-    end
+    client:expire('request2', 1000)
 end
 msg_len=2+4*20
