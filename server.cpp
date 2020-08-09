@@ -229,7 +229,12 @@ int main(int argc, char **argv)
   // initial lua
   lua_State *L = luaL_newstate();
   luaL_openlibs(L);
-  luaL_dofile(L, "register.lua");
+  auto ret = luaL_dofile(L, "register.lua");
+  if (ret != 0)
+  {
+    printf("Error occurs when calling luaL_dofile() Hint Machine 0x%x\n", ret);
+    printf("Error: %s\n", lua_tostring(L, -1));
+  }
   luaL_dofile(L, "tree.lua");
   lunar<Buffer>::regist(L);
 
@@ -327,9 +332,12 @@ int main(int argc, char **argv)
         // query completed
         if (current->status == NET_ASYNC_COMPLETE)
         {
-          current->results[current->pending_data - 1] = mysql_store_result(current->con);
-          if (current->results[current->pending_data - 1] == NULL)
-            handle_mysql_error(current->con);
+          // normal case, hold true unless no query being performed
+          if (current->pending_data <= current->query_num){
+            current->results[current->pending_data - 1] = mysql_store_result(current->con);
+            if (current->results[current->pending_data - 1] == NULL)
+              handle_mysql_error(current->con);
+          }
 
           current->pending_data += 1;
           if (current->pending_data > current->query_num)
@@ -360,6 +368,7 @@ int main(int argc, char **argv)
               std::string variable = "res" + std::to_string(i);
               lua_setglobal(L, variable.c_str());
             }
+            printf("aaa");
             delete[] current->query_array;
             delete[] current->results;
 
@@ -534,6 +543,17 @@ int main(int argc, char **argv)
               if (!lua_isnumber(L, -1))
                 printf("Error! `request_type' should be a number\n");
               current->request_type = lua_tonumber(L, -1);
+              // if no need to query
+              lua_getglobal(L, "need_query");
+              if(lua_tonumber(L, -1)==-1){
+                current->query_num=0;
+                current->query_array = new char *[1]; // dummy allocation
+                current->results = new MYSQL_RES *[1]; // dummy allocation
+                current->pending_data = 1;
+                current->offset = 0;
+                current->status = NET_ASYNC_COMPLETE;
+                continue;
+              }
               lua_getglobal(L, "query_num");
               if (!lua_isnumber(L, -1))
                 printf("Error! `query_num' should be a number\n");

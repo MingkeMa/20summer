@@ -98,7 +98,7 @@ static void *get_top30(void *t_data)
 {
     thread_data *tdata = (thread_data *)t_data;
     int self = tdata->self;
-    for (int i = 0; i < tdata->my_thread[self].size(); i++)
+    for (uint i = 0; i < tdata->my_thread[self].size(); i++)
     {
         std::priority_queue<std::tuple<std::string, int, int>, std::vector<std::tuple<std::string, int, int>>, std::greater<std::tuple<std::string, int, int>>> pq;
         std::string teamname = tdata->my_thread[self].at(i);
@@ -197,15 +197,38 @@ static int pq_pthread_lua(lua_State *L)
         lua_pop(L, 1);
     }
 
-    for (int i = 0; i < nworkers; i++)
-    {
-        all_t_data[i] = new thread_data();
-        init_threadData(all_t_data[i], &data, my_thread, i);
-        pthread_create(&p_threads[i], &attr, get_top30, (void *)all_t_data[i]);
-    }
-    for (int i = 0; i < nworkers; i++)
-    {
-        pthread_join(p_threads[i], NULL);
+    work_per_thread=data.size()*(data.begin()->second.size())/nworkers;
+    if(work_per_thread>100){
+        for (int i = 0; i < nworkers; i++)
+        {
+            all_t_data[i] = new thread_data();
+            init_threadData(all_t_data[i], &data, my_thread, i);
+            pthread_create(&p_threads[i], &attr, get_top30, (void *)all_t_data[i]);
+        }
+        for (int i = 0; i < nworkers; i++)
+        {
+            pthread_join(p_threads[i], NULL);
+        }
+    }else{
+        for (auto it = data.begin(); it!=data.end(); it++)
+        {
+            std::priority_queue<std::tuple<std::string, int, int>, std::vector<std::tuple<std::string, int, int>>, std::greater<std::tuple<std::string, int, int>>> pq;
+            for (auto &element : it->second)
+            {
+                pq.push(element);
+                if (pq.size() > 30)
+                {
+                    pq.pop();
+                }
+            }
+            int j = 1;
+            while (!pq.empty())
+            {
+                it->second.at(j) = pq.top();
+                pq.pop();
+                j++;
+            }
+        }
     }
 
     // traverse lua table again to write data
@@ -213,7 +236,7 @@ static int pq_pthread_lua(lua_State *L)
     while (lua_next(L, -2) != 0)
     {
         std::string teamname(lua_tostring(L, -2));
-        for (int i = 1; i < std::min((size_t)31, data[teamname].size()); i++)
+        for (uint i = 1; i < std::min((size_t)31, data[teamname].size()); i++)
         {
             lua_rawgeti(L, -1, i);
             lua_pushstring(L, std::get<0>(data[teamname].at(i)).c_str());

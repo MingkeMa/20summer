@@ -1,4 +1,5 @@
 print("doing read_buffer")
+need_query=1
 do
     local buffer = lunar.Buffer();
     buffer.setBuffer(buffer_pointer)
@@ -19,9 +20,13 @@ do
                 " AND LAST_DAY(" .. date .. "))" 
     elseif(request_type==2)
     then
-        query_num=1
-        query1="SELECT TeamID, dtEventTime, TeamKill, TeamRank FROM (GameRecord INNER JOIN MatchRegister USING (OpenID1,OpenID2,OpenID3,OpenID4))"
-
+        if(client:exists("request2"))
+        then
+            need_query=-1
+        else
+            query_num=1
+            query1="SELECT TeamID, dtEventTime, TeamKill, TeamRank FROM (GameRecord INNER JOIN MatchRegister USING (OpenID1,OpenID2,OpenID3,OpenID4))"
+        end
     else
 
     end
